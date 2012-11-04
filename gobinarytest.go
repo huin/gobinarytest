@@ -11,7 +11,7 @@ import (
 )
 
 type MatchError struct {
-	FailedMatcher IBytesMatcher
+	FailedMatcher Matcher
 	NextBytes     []byte
 }
 
@@ -20,7 +20,7 @@ func (err *MatchError) Error() string {
 }
 
 type TrailingBytesError struct {
-	FailedMatcher IBytesMatcher
+	FailedMatcher Matcher
 	TrailingBytes []byte
 }
 
@@ -28,66 +28,58 @@ func (err *TrailingBytesError) Error() string {
 	return fmt.Sprintf("trailing bytes when matching %v: %x", err.FailedMatcher, err.TrailingBytes)
 }
 
-// IBytesMatcher is the interface that tests if a sequence of bytes matches
+// Matcher is the interface that tests if a sequence of bytes matches
 // expectations.
-type IBytesMatcher interface {
+type Matcher interface {
 	// Match tests if the given sequence of bytes matches. It returns
 	// matches=true if it matches correctly, and returns the number of bytes
 	// matched as n.
 	Match(b []byte) (n int, err error)
 
 	// Write writes a sequence of bytes to the buffer that is an acceptable match
-	// for the matcher..
+	// for the matcher.
 	Write(writer *bytes.Buffer)
 
 	String() string
 }
 
-// BytesLiteral matches a literal sequence of bytes.
-type BytesLiteral struct {
-	Bytes []byte
+// Literal matches a literal sequence of bytes.
+type Literal []byte
+
+func LiteralString(s string) Literal {
+	return Literal(s)
 }
 
-func LiteralString(s string) *BytesLiteral {
-	return &BytesLiteral{[]byte(s)}
-}
-
-func (bm *BytesLiteral) Match(b []byte) (n int, err error) {
-	if len(b) < len(bm.Bytes) {
+func (bm Literal) Match(b []byte) (n int, err error) {
+	if len(b) < len(bm) {
 		return 0, &MatchError{bm, b}
 	}
 
-	for i, v := range bm.Bytes {
+	for i, v := range bm {
 		if v != b[i] {
 			return 0, &MatchError{bm, b}
 		}
 	}
 
-	return len(bm.Bytes), nil
+	return len(bm), nil
 }
 
-func (bm *BytesLiteral) Write(writer *bytes.Buffer) {
-	writer.Write(bm.Bytes)
+func (bm Literal) Write(writer *bytes.Buffer) {
+	writer.Write(bm)
 }
 
-func (bm *BytesLiteral) String() string {
-	return fmt.Sprintf("&BytesLiteral{%x}", bm.Bytes)
+func (bm Literal) String() string {
+	return fmt.Sprintf("Literal{%x}", bm)
 }
 
-// BytesMatcherInOrder matches a sequence of BytesMatchers that must match in
+// InOrder matches a sequence of Matchers that must match in
 // the order given.
-type BytesMatcherInOrder struct {
-	Matchers []IBytesMatcher
-}
+type InOrder []Matcher
 
-func InOrder(matchers ...IBytesMatcher) *BytesMatcherInOrder {
-	return &BytesMatcherInOrder{matchers}
-}
-
-func (bm *BytesMatcherInOrder) Match(b []byte) (n int, err error) {
+func (bm InOrder) Match(b []byte) (n int, err error) {
 	var consumed int
 
-	for _, matcher := range bm.Matchers {
+	for _, matcher := range bm {
 		remainder := b[n:]
 
 		if consumed, err = matcher.Match(remainder); err != nil {
@@ -100,34 +92,28 @@ func (bm *BytesMatcherInOrder) Match(b []byte) (n int, err error) {
 	return n, nil
 }
 
-func (bm *BytesMatcherInOrder) Write(writer *bytes.Buffer) {
-	for _, matcher := range bm.Matchers {
+func (bm InOrder) Write(writer *bytes.Buffer) {
+	for _, matcher := range bm {
 		matcher.Write(writer)
 	}
 }
 
-func (bm *BytesMatcherInOrder) String() string {
-	parts := make([]string, len(bm.Matchers))
-	for i, matcher := range bm.Matchers {
+func (bm InOrder) String() string {
+	parts := make([]string, len(bm))
+	for i, matcher := range bm {
 		parts[i] = matcher.String()
 	}
 	s := strings.Join(parts, ", ")
-	return fmt.Sprintf("&BytesMatcherInOrder{%s}", s)
+	return fmt.Sprintf("InOrder{%s}", s)
 }
 
-// BytesMatcherAnyOrder matches a set of BytesMatchers, but they do not have to
+// AnyOrder matches a set of Matchers, but they do not have to
 // match in any particular order.
-type BytesMatcherAnyOrder struct {
-	Matchers []IBytesMatcher
-}
+type AnyOrder []Matcher
 
-func AnyOrder(matchers ...IBytesMatcher) *BytesMatcherAnyOrder {
-	return &BytesMatcherAnyOrder{matchers}
-}
-
-func (bm *BytesMatcherAnyOrder) Match(b []byte) (n int, err error) {
-	toMatch := make([]IBytesMatcher, len(bm.Matchers))
-	copy(toMatch, bm.Matchers)
+func (bm AnyOrder) Match(b []byte) (n int, err error) {
+	toMatch := make([]Matcher, len(bm))
+	copy(toMatch, bm)
 	var consumed int
 
 	for {
@@ -154,29 +140,29 @@ func (bm *BytesMatcherAnyOrder) Match(b []byte) (n int, err error) {
 		}
 
 		if !foundMatch {
-			return 0, &MatchError{&BytesMatcherAnyOrder{toMatch}, remainder}
+			return 0, &MatchError{AnyOrder(toMatch), remainder}
 		}
 	}
 
 	return n, nil
 }
 
-func (bm *BytesMatcherAnyOrder) Write(writer *bytes.Buffer) {
-	for _, matcher := range bm.Matchers {
+func (bm AnyOrder) Write(writer *bytes.Buffer) {
+	for _, matcher := range bm {
 		matcher.Write(writer)
 	}
 }
 
-func (bm *BytesMatcherAnyOrder) String() string {
-	parts := make([]string, len(bm.Matchers))
-	for i, matcher := range bm.Matchers {
+func (bm AnyOrder) String() string {
+	parts := make([]string, len(bm))
+	for i, matcher := range bm {
 		parts[i] = matcher.String()
 	}
 	s := strings.Join(parts, ", ")
-	return fmt.Sprintf("&BytesMatcherAnyOrder{%s}", s)
+	return fmt.Sprintf("&AnyOrder{%s}", s)
 }
 
-func Matches(matcher IBytesMatcher, b []byte) error {
+func Matches(matcher Matcher, b []byte) error {
 	n, err := matcher.Match(b)
 	if err != nil {
 		return err
