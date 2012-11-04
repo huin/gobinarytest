@@ -43,6 +43,25 @@ type Matcher interface {
 	String() string
 }
 
+// Named is a wrapper for a Matcher that simply provides a name annotation on
+// its String method and any Match errors.
+type Named struct {
+	Name string
+	Matcher
+}
+
+func (bm Named) Match(b []byte) (n int, err error) {
+	n, err = bm.Matcher.Match(b)
+	if err != nil {
+		err = &MatchError{bm, b}
+	}
+	return
+}
+
+func (bm Named) String() string {
+	return fmt.Sprintf("(%s) %s", bm.Name, bm.Matcher)
+}
+
 // Literal matches a literal sequence of bytes.
 type Literal []byte
 
