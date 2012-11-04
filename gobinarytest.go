@@ -69,7 +69,7 @@ func (bm Literal) Write(writer *bytes.Buffer) {
 }
 
 func (bm Literal) String() string {
-	return fmt.Sprintf("Literal{%x}", bm)
+	return fmt.Sprintf("Literal{%x}", []byte(bm))
 }
 
 // InOrder matches a sequence of Matchers that must match in
