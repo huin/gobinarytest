@@ -13,10 +13,18 @@ import (
 type MatchError struct {
 	FailedMatcher Matcher
 	NextBytes     []byte
+	Context       []string
 }
 
 func (err *MatchError) Error() string {
-	return fmt.Sprintf("failed to match %v on bytes: %x", err.FailedMatcher, err.NextBytes)
+	return fmt.Sprintf(
+		"failed to match %s %v on remaining bytes: %x",
+		strings.Join(err.Context, " within "),
+		err.FailedMatcher, err.NextBytes)
+}
+
+func (err *MatchError) AddContext(ctx string) {
+	err.Context = append(err.Context, ctx)
 }
 
 type TrailingBytesError struct {
@@ -44,7 +52,7 @@ type Matcher interface {
 }
 
 // Named is a wrapper for a Matcher that simply provides a name annotation on
-// its String method and any Match errors.
+// its String method and add its name to any MatchErrors.
 type Named struct {
 	Name string
 	Matcher
@@ -53,7 +61,9 @@ type Named struct {
 func (bm Named) Match(b []byte) (n int, err error) {
 	n, err = bm.Matcher.Match(b)
 	if err != nil {
-		err = &MatchError{bm, b}
+		if matchErr, ok := err.(*MatchError); ok {
+			matchErr.AddContext(bm.Name)
+		}
 	}
 	return
 }
@@ -71,12 +81,12 @@ func LiteralString(s string) Literal {
 
 func (bm Literal) Match(b []byte) (n int, err error) {
 	if len(b) < len(bm) {
-		return 0, &MatchError{bm, b}
+		return 0, &MatchError{bm, b, nil}
 	}
 
 	for i, v := range bm {
 		if v != b[i] {
-			return 0, &MatchError{bm, b}
+			return 0, &MatchError{bm, b, nil}
 		}
 	}
 
@@ -159,7 +169,7 @@ func (bm AnyOrder) Match(b []byte) (n int, err error) {
 		}
 
 		if !foundMatch {
-			return 0, &MatchError{AnyOrder(toMatch), remainder}
+			return 0, &MatchError{AnyOrder(toMatch), remainder, nil}
 		}
 	}
 
