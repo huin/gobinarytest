@@ -18,7 +18,7 @@ type MatchError struct {
 
 func (err *MatchError) Error() string {
 	return fmt.Sprintf(
-		"failed to match %s %v on remaining bytes: %x",
+		"failed to match <%s> %v on remaining bytes: % x",
 		strings.Join(err.Context, " within "),
 		err.FailedMatcher, err.NextBytes)
 }
@@ -33,7 +33,8 @@ type TrailingBytesError struct {
 }
 
 func (err *TrailingBytesError) Error() string {
-	return fmt.Sprintf("trailing bytes when matching %v: %x", err.FailedMatcher, err.TrailingBytes)
+	return fmt.Sprintf("%d trailing bytes when matching %v: % x",
+		len(err.TrailingBytes), err.FailedMatcher, err.TrailingBytes)
 }
 
 // Matcher is the interface that tests if a sequence of bytes matches
@@ -98,7 +99,7 @@ func (bm Literal) Write(writer *bytes.Buffer) {
 }
 
 func (bm Literal) String() string {
-	return fmt.Sprintf("Literal{%x}", []byte(bm))
+	return fmt.Sprintf("Literal{% x}", []byte(bm))
 }
 
 // InOrder matches a sequence of Matchers that must match in
